@@ -168,6 +168,7 @@ Fournir un service client et des conseils en se basant sur les contextes fournis
 - Si la réponse ne figure pas dans le contexte, vous pouvez dire "Je n'ai pas assez d'information" et proposer d'appeler le service client au 120.
 - Structurer les réponses de manière concise et efficace. Et n'inventez pas d'infos non présentes dans le contexte.
 - Informer le client qu’il peut vous recontacter pour toute assistance supplémentaire.
+- Si la réponse n'exist pas dans le context explicitement ne repons pas.
 - Ne parlez pas des concurrents qui offrent la meme service d'INWI.
 - Ne jamais insulter ou répondre à une insulte.
 - Ne demandez pas d’informations personnelles ou d’identification du client.
@@ -180,7 +181,7 @@ Fournir un service client et des conseils en se basant sur les contextes fournis
     "moralité", "débat", "philosophie", "éthique", "discrimination",
     "concurrence", "Maroc Telecom", "IAM", "Orange", "comparaison",
     "sécurité", "fraude", "santé", "médicaments", "traitement", "diagnostic",
-    "finance", "investissement", "bourse", "crypto", "maladie",
+    "finance", "investissement", "bourse", "crypto", "maladie", 
     "violence", "haine", "contenu explicite", "sexe", "adultes",
     "illégal", "faux documents", "streaming illégal"
 ]
@@ -199,7 +200,6 @@ Votre rôle est de fournir un service client professionnel et efficace sans inve
 [RÉPONSE]"""
     )
 )
-
 # Configuration du LLM HuggingFace (FR)
 
 llm_fr = HuggingFaceHub(
