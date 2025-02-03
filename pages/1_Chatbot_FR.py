@@ -289,7 +289,7 @@ def main():
 
         if context_fr_list:
             with st.spinner("Génération de la réponse..."):
-                response_fr = llm_chain_fr.run({"context": "\n".join(context_fr_list), "query": user_query_fr})
+                response_fr = llm_chain_fr.run({"context": "\n".join(context_fr_list), "query": user_query_fr + "?"})
                 # Séparer si jamais le prompt contient [RÉPONSE], sinon on affiche tout
                 response_fr = response_fr.split("[RÉPONSE]")[-1]
             st.write("**Question :**")
