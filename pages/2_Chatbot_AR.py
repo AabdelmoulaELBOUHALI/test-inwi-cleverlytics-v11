@@ -16,6 +16,9 @@ import pysqlite3
 import sys
 sys.modules["sqlite3"] = pysqlite3
 
+####
+from langchain_openai import ChatOpenAI
+
 #####################
 # 1. HELPER FUNCTIONS
 #####################
@@ -200,15 +203,28 @@ prompt_template_ar = PromptTemplate(
 
 # Configuration du LLM HuggingFace (AR)
 #os.environ["HUGGINGFACEHUB_API"]
-llm_ar = HuggingFaceHub(
-    repo_id="MBZUAI-Paris/Atlas-Chat-2B", #"MBZUAI-Paris/Atlas-Chat-9B",
-    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
+from langchain_openai import ChatOpenAI
+
+llm_ar = ChatOpenAI(
+    model="Atlas-Chat-9B",
+    base_url="https://api.friendli.ai/serverless/v1",
+    api_key=os.environ["FRIENDLI_TOKEN"],
     model_kwargs={
         "temperature": 0.5,
         "max_length": 500,
         "timeout": 600
     }
 )
+
+# llm_ar = HuggingFaceHub(
+#     repo_id="MBZUAI-Paris/Atlas-Chat-2B", #"MBZUAI-Paris/Atlas-Chat-9B",
+#     huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
+#     model_kwargs={
+#         "temperature": 0.5,
+#         "max_length": 500,
+#         "timeout": 600
+#     }
+# )
 
 # Chaîne AR
 llm_chain_ar = LLMChain(llm=llm_ar, prompt=prompt_template_ar)
