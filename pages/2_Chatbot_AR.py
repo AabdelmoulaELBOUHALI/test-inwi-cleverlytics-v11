@@ -207,7 +207,7 @@ from langchain_openai import ChatOpenAI
 
 llm_ar = ChatOpenAI(
     model="Atlas-Chat-9B",
-    base_url="https://api.friendli.ai/dedicated/v1",
+    base_url="https://api.friendli.ai/dedicated",
     api_key=os.environ["FRIENDLI_TOKEN"],
 )
 
