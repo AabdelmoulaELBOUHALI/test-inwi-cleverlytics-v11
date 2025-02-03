@@ -202,7 +202,7 @@ Votre rôle est de fournir un service client professionnel et efficace sans inve
 )
 
 # Configuration du LLM HuggingFace (FR)
-os.environ["HUGGINGFACEHUB_API"]
+os.environ["HUGGINGFACEHUB_API_TOKEN"]
 llm_fr = HuggingFaceHub(
     repo_id="mistralai/Mistral-7B-Instruct-v0.3",
     model_kwargs={
