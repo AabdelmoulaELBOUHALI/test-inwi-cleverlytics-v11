@@ -8,4 +8,3 @@ openpyxl
 sentence_transformers 
 pysqlite3-binary
 chromadb
-langchain-chroma
