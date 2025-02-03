@@ -205,7 +205,8 @@ llm_ar = HuggingFaceHub(
     huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
     model_kwargs={
         "temperature": 0.5,
-        "max_length": 500
+        "max_length": 500,
+        "timeout": 60
     }
 )
 
@@ -280,7 +281,7 @@ def main():
             return
         
         # Récupération du contexte
-        context_ar_list = retrieve_context_ar(st.session_state["retriever_ar"], user_query_ar, top_k=5)
+        context_ar_list = retrieve_context_ar(st.session_state["retriever_ar"], user_query_ar, top_k=3)
 
         if context_ar_list:
             with st.spinner("Génération de la réponse..."):
