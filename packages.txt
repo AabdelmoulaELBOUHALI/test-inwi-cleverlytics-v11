@@ -1,10 +1,10 @@
 streamlit
 pandas
 langchain
-huggingface_hub
 torch
 langchain_community
 openpyxl
 sentence_transformers 
 pysqlite3-binary
 chromadb
+langchain-chroma
