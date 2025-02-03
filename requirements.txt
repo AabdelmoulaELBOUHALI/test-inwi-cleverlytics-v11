@@ -1,0 +1,11 @@
+streamlit
+pandas
+langchain
+huggingface_hub
+torch
+langchain_community
+openpyxl
+sentence_transformers 
+pysqlite3-binary
+chromadb==0.4.0
+langchain-chroma==0.1.4
