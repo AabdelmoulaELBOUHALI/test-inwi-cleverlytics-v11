@@ -205,21 +205,21 @@ prompt_template_ar = PromptTemplate(
 #os.environ["HUGGINGFACEHUB_API"]
 from langchain_openai import ChatOpenAI
 
-llm_ar = ChatOpenAI(
-    model="Atlas-Chat-9B",
-    base_url="https://api.friendli.ai/dedicated",
-    api_key=os.environ["FRIENDLI_TOKEN"],
-)
-
-# llm_ar = HuggingFaceHub(
-#     repo_id="MBZUAI-Paris/Atlas-Chat-2B", #"MBZUAI-Paris/Atlas-Chat-9B",
-#     huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
-#     model_kwargs={
-#         "temperature": 0.5,
-#         "max_length": 500,
-#         "timeout": 600
-#     }
+# llm_ar = ChatOpenAI(
+#     model="Atlas-Chat-9B",
+#     base_url="https://api.friendli.ai/dedicated",
+#     api_key=os.environ["FRIENDLI_TOKEN"],
 # )
+
+llm_ar = HuggingFaceHub(
+    repo_id="MBZUAI-Paris/Atlas-Chat-2B", #"MBZUAI-Paris/Atlas-Chat-9B",
+    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
+    model_kwargs={
+        "temperature": 0.5,
+        "max_length": 500,
+        "timeout": 600
+    }
+)
 
 # Chaîne AR
 llm_chain_ar = LLMChain(llm=llm_ar, prompt=prompt_template_ar)
