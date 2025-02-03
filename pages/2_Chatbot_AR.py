@@ -284,7 +284,7 @@ def main():
 
         if context_ar_list:
             with st.spinner("Génération de la réponse..."):
-                response_ar = llm_chain_ar.run({"context": "\n".join(context_ar_list), "query": user_query_ar})
+                response_ar = llm_chain_ar.run({"context": "\n".join(context_ar_list), "query": user_query_ar + "?"})
                 response_ar = response_ar.split("[الإجابة]")[-1]
             st.write("**سؤال العميل:**")
             st.write(user_query_ar)
