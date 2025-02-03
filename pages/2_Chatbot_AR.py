@@ -206,7 +206,7 @@ llm_ar = HuggingFaceHub(
     model_kwargs={
         "temperature": 0.5,
         "max_length": 500,
-        "timeout": 60
+        "timeout": 600
     }
 )
 
