@@ -199,7 +199,7 @@ prompt_template_ar = PromptTemplate(
 )
 
 # Configuration du LLM HuggingFace (AR)
-os.environ["HUGGINGFACEHUB_API_TOKEN"]
+os.environ["HUGGINGFACEHUB_API"]
 llm_ar = HuggingFaceHub(
     repo_id="MBZUAI-Paris/Atlas-Chat-9B",
     model_kwargs={
