@@ -205,7 +205,7 @@ Votre rôle est de fournir un service client professionnel et efficace sans inve
 
 llm_fr = HuggingFaceHub(
     repo_id="mistralai/Mistral-7B-Instruct-v0.3",
-    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"]
+    huggingfacehub_api_token=os.environ["HUGGINGFACEHUB_API"],
     model_kwargs={
         "temperature": 0.5,
         "max_length": 500
