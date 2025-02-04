@@ -385,7 +385,7 @@ def main():
             
             st.write("**Question :**")
             st.write(user_query_fr)
-            st.write("**Réponse générée par l'IA :**")
+            st.write("**Réponse générée :**")
             st.write(response_fr)
             
             # --- Classification step ---
