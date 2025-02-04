@@ -1,7 +1,7 @@
 ---
-title: Test inwi app
+title: Test inwi app v1
 sdk: streamlit
-emoji: 📚
+emoji: 💻
 colorTo: purple
 pinned: false
 sdk_version: 1.41.1
