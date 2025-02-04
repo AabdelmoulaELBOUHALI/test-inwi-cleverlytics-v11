@@ -3,22 +3,17 @@ import pandas as pd
 import os
 from pathlib import Path
 import base64
-
-# LangChain & Hugging Face
-from langchain.embeddings import HuggingFaceEmbeddings
-from langchain.vectorstores import Chroma
-from langchain.schema import Document
-from langchain.prompts import PromptTemplate
-from langchain.llms import HuggingFaceHub
-from langchain.chains import LLMChain
-
-import pysqlite3
 import sys
+import torch
+from transformers import BertForSequenceClassification, BertTokenizer
+
+# Force using pysqlite3 if needed
+import pysqlite3
 sys.modules["sqlite3"] = pysqlite3
 
-#####################
-# 1. HELPER FUNCTIONS
-#####################
+##############################
+# 1. HELPER FUNCTIONS (for the main chatbot)
+##############################
 
 def get_base64_of_bin_file(bin_file_path: str) -> str:
     file_bytes = Path(bin_file_path).read_bytes()
@@ -92,28 +87,29 @@ def create_contextual_fr(df, category, strat_id=0):
 def load_excel_and_create_vectorstore_fr(excel_path: str, persist_dir: str = "./chroma_db_fr"):
     """
     Charge les données depuis plusieurs feuilles Excel (version FR),
-    construit & stocke un Chroma VectorStore.
+    construit & stocke un Chroma VectorStore pour le chatbot.
     """
-    # 1. Charger les feuilles Excel 
+    # Charger les feuilles Excel
     qna_tree_fr0 = pd.read_excel(excel_path, sheet_name="Prépayé (FR)", skiprows=1).iloc[:, :5]
     qna_tree_fr1 = pd.read_excel(excel_path, sheet_name="Postpayé (FR)", skiprows=1).iloc[:, :5]
     qna_tree_fr2 = pd.read_excel(excel_path, sheet_name="Wifi (FR)",      skiprows=1).iloc[:, :5]
 
-    # 2. Construire le contexte
+    # Construire le contexte
     context_fr0 = create_contextual_fr(qna_tree_fr0, "Prépayé", strat_id = 0)
     context_fr1 = create_contextual_fr(qna_tree_fr1, "Postpayé", strat_id = len(context_fr0))
     context_fr2 = create_contextual_fr(qna_tree_fr2, "Wifi",     strat_id = len(context_fr0) + len(context_fr1))
 
-    # 3. Concaténer les DataFrame
+    # Concaténer les DataFrame
     context_fr = pd.concat([context_fr0, context_fr1, context_fr2], axis=0)
 
-    # 4. Créer une colonne "context"
+    # Créer une colonne "context"
     context_fr["context"] = context_fr.apply(
         lambda row: f"{row['question']} > {row['answer']}",
         axis=1
     )
 
-    # 5. Convertir chaque ligne en Document
+    # Convertir chaque ligne en Document (pour Chroma)
+    from langchain.schema import Document
     documents_fr = [
         Document(
             page_content=row["context"],
@@ -122,7 +118,9 @@ def load_excel_and_create_vectorstore_fr(excel_path: str, persist_dir: str = "./
         for _, row in context_fr.iterrows()
     ]
 
-    # 6. Créer & persister le vecteur
+    # Créer & persister le vector store
+    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain.vectorstores import Chroma
     embedding_model_fr = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore_fr = Chroma.from_documents(documents_fr, embedding_model_fr, persist_directory=persist_dir)
     vectorstore_fr.persist()
@@ -133,6 +131,8 @@ def load_existing_vectorstore_fr(persist_dir: str = "./chroma_db_fr"):
     """
     Charge un VectorStore Chroma déjà stocké (version FR).
     """
+    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain.vectorstores import Chroma
     embedding_model_fr = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
     vectorstore_fr = Chroma(
         persist_directory=persist_dir,
@@ -150,10 +150,105 @@ def retrieve_context_fr(retriever_fr, query, top_k=5):
         context_fr_list.append(result.page_content)
     return context_fr_list
 
+##############################
+# 2. CLASSIFICATION MODEL SETUP
+##############################
 
-#########################
-# 2. PROMPT & LLM FR   #
-#########################
+# Specify the path where the classification model and tokenizer are saved.
+MODEL_PATH = "saved_bert_model_v1"
+
+# Load the tokenizer and model for sequence classification.
+tokenizer = BertTokenizer.from_pretrained(MODEL_PATH)
+model = BertForSequenceClassification.from_pretrained(MODEL_PATH)
+model.eval()  # Set model to evaluation mode
+
+# Use GPU if available.
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+model.to(device)
+
+def predict_class(text, max_length=500):
+    """
+    Predicts the class (as string) for a given input text.
+    """
+    inputs = tokenizer(
+        text,
+        add_special_tokens=True,
+        max_length=max_length,
+        padding='max_length',
+        truncation=True,
+        return_tensors="pt"
+    )
+    # Move inputs to the device.
+    inputs = {k: v.to(device) for k, v in inputs.items()}
+    
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    logits = outputs.logits
+    predicted_class_id = torch.argmax(logits, dim=1).item()
+    predicted_label = model.config.id2label[predicted_class_id]
+    return predicted_label
+
+##############################
+# 3. CLASSIFICATION DATASET & VECTOR STORE
+##############################
+
+@st.cache_data(show_spinner=False)
+def load_classification_dataset():
+    """
+    Loads the classification Q&A dataset from the Excel file and returns a DataFrame.
+    """
+    df = pd.read_excel("Classification dataset - Q&A.xlsx", sheet_name="Fr")
+    return df
+
+@st.cache_resource(show_spinner=False)
+def load_classification_vectorstore(persist_dir: str = "./chroma_db_class_fr"):
+    """
+    Builds (and persists) a Chroma vector store from the classification Q&A dataset.
+    Each document contains the answer (Réponse) with metadata including the class ("Classe").
+    """
+    df = load_classification_dataset()
+    # Create documents using the "Réponse" as content and include metadata.
+    from langchain.schema import Document
+    documents = []
+    for _, row in df.iterrows():
+        documents.append(
+            Document(
+                page_content=row["Réponse"],
+                metadata={
+                    "id": row["ID"],
+                    "Classe": row["Classe"],
+                    "Question": row["Question"]
+                }
+            )
+        )
+    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain.vectorstores import Chroma
+    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vectorstore = Chroma.from_documents(documents, embedding_model, persist_directory=persist_dir)
+    vectorstore.persist()
+    return vectorstore
+
+def load_existing_classification_vectorstore(persist_dir: str = "./chroma_db_class_fr"):
+    """
+    Loads an existing Chroma vector store for the classification dataset.
+    """
+    from langchain.embeddings import HuggingFaceEmbeddings
+    from langchain.vectorstores import Chroma
+    embedding_model = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+    vectorstore = Chroma(
+        persist_directory=persist_dir,
+        embedding_function=embedding_model
+    )
+    return vectorstore
+
+##############################
+# 4. PROMPT & LLM FR SETUP
+##############################
+
+from langchain.prompts import PromptTemplate
+from langchain.llms import HuggingFaceHub
+from langchain.chains import LLMChain
 
 prompt_template_fr = PromptTemplate(
     input_variables=["context", "query"],
@@ -162,7 +257,7 @@ prompt_template_fr = PromptTemplate(
 Vous êtes un assistant client professionnel, expérimenté et bienveillant pour l'opérateur téléphonique INWI. 
 Vous excellez dans la gestion des clients, en répondant à leurs problèmes et questions.
 Fournir un service client et des conseils en se basant sur les contextes fournis :
-- Répondre aux salutations de manière courtoise et amicale, par exemple : "Bonjour! Je suis l'assistant IA d'INWI'. Comment puis-je vous aider aujourd'hui ?" 
+- Répondre aux salutations de manière courtoise et amicale, par exemple : "Bonjour! Je suis l'assistant IA d'INWI. Comment puis-je vous aider aujourd'hui ?" 
 - Identifier le besoin du client et demander des clarifications si nécessaire, tout en s'appuyant uniquement sur le contexte.
 - Si la question n'est pas liée au contexte d'INWI, veuillez informer poliment que vous ne pouvez pas répondre à des questions hors contexte INWI.
 - Si la réponse ne figure pas dans le contexte, vous pouvez dire "Je n'ai pas assez d'information" et proposer d'appeler le service client au 120.
@@ -189,17 +284,13 @@ pour les particuliers et les entreprises. Il se distingue par son engagement à 
 accessibles, tout en contribuant au développement numérique du pays.
 Les clients sont notre priorité, et notre but est de résoudre leurs problèmes. 
 Votre rôle est de fournir un service client professionnel et efficace sans inventer d'informations.
-
 [CONTEXTE]
 {context}
-
 [QUESTION DU CLIENT]
 {query}
-
 [RÉPONSE]"""
     )
 )
-# Configuration du LLM HuggingFace (FR)
 
 llm_fr = HuggingFaceHub(
     repo_id="mistralai/Mistral-7B-Instruct-v0.3",
@@ -210,18 +301,16 @@ llm_fr = HuggingFaceHub(
     }
 )
 
-# Chaîne FR
 llm_chain_fr = LLMChain(llm=llm_fr, prompt=prompt_template_fr)
 
-
-#########################
-# 3. STREAMLIT MAIN APP #
-#########################
+##############################
+# 5. STREAMLIT MAIN APP
+##############################
 
 def main():
     st.subheader("INWI IA Chatbot - Français")
 
-     # Read local image and convert to Base64
+    # Sidebar: add logo image.
     img_base64 = get_base64_of_bin_file("./img/logo inwi celeverlytics.png")
     css_logo = f"""
     <style>
@@ -238,10 +327,9 @@ def main():
     }}
     </style>
     """
-
     st.markdown(css_logo, unsafe_allow_html=True)
 
-    # Charger ou créer le retriever
+    # Load or create the retriever for the main chatbot context.
     if "retriever_fr" not in st.session_state:
         st.session_state["retriever_fr"] = None
 
@@ -274,7 +362,7 @@ def main():
     st.write("""Je suis là pour répondre à toutes vos questions concernant nos 
             services, nos offres mobiles et Internet, ainsi que nos solutions adaptées à vos besoins (FR).""")
 
-    # Zone de texte
+    # Text input for user's question.
     user_query_fr = st.chat_input("Posez votre question ici (FR)...")
 
     if user_query_fr:
@@ -282,23 +370,61 @@ def main():
             st.warning("Veuillez d'abord créer ou charger la Vector Store (FR).")
             return
         
-        # Récupération du contexte
+        # Retrieve context from the main chatbot vector store.
         context_fr_list = retrieve_context_fr(st.session_state["retriever_fr"], user_query_fr, top_k=5)
 
         if context_fr_list:
             with st.spinner("Génération de la réponse..."):
-                response_fr = llm_chain_fr.run({"context": "\n".join(context_fr_list), "query": user_query_fr + "?"})
-                # Séparer si jamais le prompt contient [RÉPONSE], sinon on affiche tout
-                response_fr = response_fr.split("[RÉPONSE]")[-1]
+                # Run the LLM chain to generate a candidate answer.
+                response_fr = llm_chain_fr.run({
+                    "context": "\n".join(context_fr_list),
+                    "query": user_query_fr + "?"
+                })
+                # Remove any prompt markers.
+                response_fr = response_fr.split("[RÉPONSE]")[-1].strip()
+            
             st.write("**Question :**")
             st.write(user_query_fr)
-            st.write("**Réponse :**")
+            st.write("**Réponse générée par l'IA :**")
             st.write(response_fr)
+            
+            # --- Classification step ---
+            with st.spinner("Classification de la réponse..."):
+                predicted_label = predict_class(response_fr)
+            st.write(f"**Classe prédite :** {predicted_label}")
+            
+            # --- Retrieve final answer using the classification vector store ---
+            if predicted_label != "Autre":
+                # Build or load the classification vector store if not already in session_state.
+                if "class_retriever" not in st.session_state:
+                    # Either create new or load existing
+                    try:
+                        # Attempt to load an existing vector store.
+                        vectorstore_class = load_existing_classification_vectorstore("./chroma_db_class_fr")
+                    except Exception:
+                        # If not found, create it.
+                        vectorstore_class = load_classification_vectorstore("./chroma_db_class_fr")
+                    st.session_state["class_retriever"] = vectorstore_class.as_retriever(
+                        search_type="mmr",
+                        search_kwargs={"k": 1, "lambda_mult": 0.5}
+                    )
+                # Retrieve the final answer with a metadata filter.
+                # (Assumes the underlying retriever supports a filter parameter.)
+                final_docs = st.session_state["class_retriever"].get_relevant_documents(
+                    response_fr, filter={"Classe": predicted_label}
+                )
+                if final_docs:
+                    final_answer = final_docs[0].page_content
+                else:
+                    final_answer = response_fr  # fallback if no document found
+            else:
+                final_answer = ("Je n'ai pas d'information précise à ce sujet. "
+                                "Souhaitez-vous que je vous mette en contact avec un agent Inwi ?")
+            
+            st.write("**Réponse finale :**")
+            st.write(final_answer)
         else:
             st.write("Aucun contexte trouvé pour cette question. Essayez autre chose.")
 
-
 if __name__ == "__main__":
     main()
-
-
